@@ -214,6 +214,7 @@ body {
   touch-action: none;
 }
 #stage.over-card { cursor: pointer; }
+#stage.quick-mark.over-card { cursor: cell; }
 #stage.dragging { cursor: grabbing; }
 
 #world {

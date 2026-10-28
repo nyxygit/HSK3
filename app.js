@@ -67,7 +67,7 @@
   var levelCounts = {};
 
   var showPinyin = true;
-  var showLevels = true;
+  var quickMark = false;     /* click marks instead of opening the card */
 
   /* ------------------------------------------------------------- helpers */
   function strip(s) {
@@ -289,17 +289,15 @@
     var pinyin = showPinyin && scale >= PY_MIN;
 
     /* ---- level bands (fill only; edges are stroked above the cards) ---- */
-    if (showLevels) {
-      for (var i = 0; i < D.levels.length; i++) {
-        var lv = D.levels[i];
-        var bx = lv.c0 * CW, by = lv.r0 * CH;
-        var bw = (lv.c1 - lv.c0 + 1) * CW, bh = (lv.r1 - lv.r0 + 1) * CH;
-        if (bx + bw < x0 || by + bh < y0 || bx > x1 || by > y1) continue;
-        ctx.fillStyle = lv.bandFill;
-        ctx.beginPath();
-        roundRectPath(bx, by, bw, bh, 18);
-        ctx.fill();
-      }
+    for (var i = 0; i < D.levels.length; i++) {
+      var lv = D.levels[i];
+      var bx = lv.c0 * CW, by = lv.r0 * CH;
+      var bw = (lv.c1 - lv.c0 + 1) * CW, bh = (lv.r1 - lv.r0 + 1) * CH;
+      if (bx + bw < x0 || by + bh < y0 || bx > x1 || by > y1) continue;
+      ctx.fillStyle = lv.bandFill;
+      ctx.beginPath();
+      roundRectPath(bx, by, bw, bh, 18);
+      ctx.fill();
     }
 
     /* ---- cards ---- */
@@ -317,22 +315,20 @@
     }
 
     /* ---- level borders, drawn over the cards so they stay crisp ---- */
-    if (showLevels) {
-      var near = scale >= 0.32;
-      var lw = (near ? 2.4 : 1.6) / scale;      /* constant width on screen */
-      ctx.lineWidth = lw;
-      for (i = 0; i < D.levels.length; i++) {
-        lv = D.levels[i];
-        bx = lv.c0 * CW;
-        by = lv.r0 * CH;
-        bw = (lv.c1 - lv.c0 + 1) * CW;
-        bh = (lv.r1 - lv.r0 + 1) * CH;
-        if (bx + bw < x0 || by + bh < y0 || bx > x1 || by > y1) continue;
-        ctx.strokeStyle = near ? lv.bandEdge : lv.bandEdgeFar;
-        ctx.beginPath();
-        roundRectPath(bx + lw / 2, by + lw / 2, bw - lw, bh - lw, 16);
-        ctx.stroke();
-      }
+    var near = scale >= 0.32;
+    var lw = (near ? 2.4 : 1.6) / scale;      /* constant width on screen */
+    ctx.lineWidth = lw;
+    for (i = 0; i < D.levels.length; i++) {
+      lv = D.levels[i];
+      bx = lv.c0 * CW;
+      by = lv.r0 * CH;
+      bw = (lv.c1 - lv.c0 + 1) * CW;
+      bh = (lv.r1 - lv.r0 + 1) * CH;
+      if (bx + bw < x0 || by + bh < y0 || bx > x1 || by > y1) continue;
+      ctx.strokeStyle = near ? lv.bandEdge : lv.bandEdgeFar;
+      ctx.beginPath();
+      roundRectPath(bx + lw / 2, by + lw / 2, bw - lw, bh - lw, 16);
+      ctx.stroke();
     }
 
     /* ---- text ---- */
@@ -579,20 +575,19 @@
     pan = { id: e.pointerId, sx: e.clientX, sy: e.clientY, tx: tx, ty: ty, moved: false, time: Date.now() };
     stage.classList.add("dragging");
 
-    if (e.pointerType === "touch") {
-      longStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
-      longFired = false;
-      clearTimeout(longTimer);
-      longTimer = setTimeout(function () {
-        if (!longStart) return;
-        var i = cellAt(longStart.x, longStart.y);
-        if (i < 0) return;
-        longFired = true;
-        if (pan) pan.moved = true;
-        stage.classList.remove("dragging");
-        cycle(i);                     /* touch equivalent of right-click */
-      }, 520);
-    }
+    /* hold still for half a second: open the card, in either click mode */
+    longStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    longFired = false;
+    clearTimeout(longTimer);
+    longTimer = setTimeout(function () {
+      if (!longStart) return;
+      var i = cellAt(longStart.x, longStart.y);
+      if (i < 0) return;
+      longFired = true;
+      if (pan) pan.moved = true;
+      stage.classList.remove("dragging");
+      openFocus(i);
+    }, 520);
   });
 
   window.addEventListener("pointermove", function (e) {
@@ -639,7 +634,10 @@
       pan = null;
       if (tap) {
         var i = cellAt(e.clientX, e.clientY);
-        if (i >= 0) openFocus(i);     /* left click opens, never marks */
+        if (i >= 0) {
+          if (quickMark) cycle(i);      /* quick-mark mode: click ticks the card */
+          else openFocus(i);            /* normal mode: click opens it */
+        }
       }
     }
     scheduleViewSave();
@@ -747,16 +745,7 @@
     focusIndex = -1;
   }
 
-  /* right-click a card: cycle grey -> green -> red -> grey */
-  stage.addEventListener("contextmenu", function (e) {
-    if (focusOpen) return;
-    var i = cellAt(e.clientX, e.clientY);
-    if (i < 0) return;
-    e.preventDefault();
-    cycle(i);
-  });
-
-  /* touch: long press does the same as right-click */
+  /* press and hold a card (mouse or touch) opens it, whatever the click mode */
   var longTimer = 0, longFired = false, longStart = null;
 
   function cancelLong() {
@@ -789,11 +778,11 @@
     try { localStorage.setItem("hsk3.pinyin", showPinyin ? "1" : "0"); } catch (e) {}
   });
 
-  var swLevels = document.getElementById("sw-levels");
-  swLevels.addEventListener("change", function () {
-    showLevels = swLevels.checked;
-    requestDraw();
-    try { localStorage.setItem("hsk3.levels", showLevels ? "1" : "0"); } catch (e) {}
+  var swQuick = document.getElementById("sw-quick");
+  swQuick.addEventListener("change", function () {
+    quickMark = swQuick.checked;
+    stage.classList.toggle("quick-mark", quickMark);
+    try { localStorage.setItem("hsk3.quick", quickMark ? "1" : "0"); } catch (e) {}
   });
 
   document.querySelector(".zoombox").addEventListener("click", function (e) {
@@ -961,9 +950,10 @@
         swPinyin.checked = false;
         showPinyin = false;
       }
-      if (localStorage.getItem("hsk3.levels") === "0") {
-        swLevels.checked = false;
-        showLevels = false;
+      if (localStorage.getItem("hsk3.quick") === "1") {
+        swQuick.checked = true;
+        quickMark = true;
+        stage.classList.add("quick-mark");
       }
     } catch (e) {}
 
