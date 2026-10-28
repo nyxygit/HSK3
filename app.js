@@ -769,17 +769,16 @@
     if (e.target.closest("[data-close]")) { closeFocus(); return; }
     var btn = e.target.closest("[data-mark]");
     if (btn) {
-      var mark = +btn.dataset.mark;
-      applyState(focusIndex, state[focusIndex] === mark ? 0 : mark);   /* tap again to clear */
-      refreshFocus();
+      applyState(focusIndex, +btn.dataset.mark);
+      closeFocus();                    /* mark it, then get out of the way */
     }
   });
 
   document.addEventListener("keydown", function (e) {
     if (!focusOpen) return;
     if (e.key === "Escape") { closeFocus(); e.preventDefault(); }
-    else if (e.key === "1") { applyState(focusIndex, state[focusIndex] === 1 ? 0 : 1); refreshFocus(); }
-    else if (e.key === "2") { applyState(focusIndex, state[focusIndex] === 2 ? 0 : 2); refreshFocus(); }
+    else if (e.key === "1") { applyState(focusIndex, 1); closeFocus(); e.preventDefault(); }
+    else if (e.key === "2") { applyState(focusIndex, 2); closeFocus(); e.preventDefault(); }
   });
 
   /* ------------------------------------------------------------- UI wiring */
