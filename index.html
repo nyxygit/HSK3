@@ -7,7 +7,7 @@
 <title>HSK 3.0 · Vocabulary map</title>
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-page="map">
 
 <header class="topbar">
   <div class="brand">
@@ -39,7 +39,7 @@
   <div class="progress">
     <div class="bars" aria-hidden="true">
       <i class="b-known" id="bar-known"></i>
-      <i class="b-red" id="bar-red"></i>
+      <i class="b-write" id="bar-write"></i>
     </div>
     <span class="ptext" id="progress-text">0 / 11,000</span>
     <button class="icon-btn" id="reset" title="Clear all marks" aria-label="Clear all marks">
@@ -48,7 +48,19 @@
   </div>
 </header>
 
-<main id="stage">
+<nav class="rail" id="rail" aria-label="Sections">
+  <button class="rail-btn is-active" data-page="map" data-label="Characters" aria-label="Characters">
+    <span class="rail-ico">字</span>
+  </button>
+  <button class="rail-btn" data-page="radicals" data-label="Radicals" aria-label="Radicals">
+    <span class="rail-ico">部</span>
+  </button>
+  <button class="rail-btn" data-page="quiz" data-label="Quiz" aria-label="Quiz">
+    <span class="rail-ico">测</span>
+  </button>
+</nav>
+
+<main id="stage" class="page">
   <canvas id="world" aria-label="Map of the 11,000 HSK 3.0 words"></canvas>
 
   <div class="hud legend" id="legend"></div>
@@ -68,27 +80,93 @@
     <b>Drag</b> to explore · <b>scroll</b> to zoom · <b>click</b> a card to open it · turn on <b>Quick mark</b> to tick cards in one click
   </div>
 
-  <div class="focus" id="focus" hidden>
-    <div class="focus-backdrop" data-close></div>
-    <div class="focus-card" role="dialog" aria-modal="true" aria-labelledby="focus-hz" tabindex="-1">
-      <button class="focus-close" data-close title="Close (Esc)" aria-label="Close">×</button>
-      <div class="focus-level" id="focus-level"><span class="dot"></span><span id="focus-level-text"></span></div>
-      <div class="focus-hz" id="focus-hz"></div>
-      <div class="focus-py" id="focus-py"></div>
-      <div class="focus-def" id="focus-def"></div>
-      <div class="focus-actions">
-        <button data-mark="1" class="mk mk-known">Known</button>
-        <button data-mark="2" class="mk mk-review">To review</button>
-      </div>
-      <div class="focus-pos" id="focus-pos"></div>
-    </div>
-  </div>
-
   <div class="loader" id="loader"><span></span>Preparing the map…</div>
 </main>
 
+<!-- ------------------------------------------------------------------ radicals -->
+<section id="page-radicals" class="page" aria-labelledby="rad-title">
+  <div class="page-inner">
+    <header class="page-head">
+      <h1 id="rad-title">Radicals <span class="zh">部首</span></h1>
+      <p>All 239 radicals, grouped by stroke count. Click a radical to mark it:
+        grey → <b class="g">green</b> (known) → <b class="r">red</b> (to review) → grey.</p>
+      <div class="stroke-filter" id="stroke-filter"></div>
+    </header>
+    <div class="rad-grid" id="rad-grid"></div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------------ quiz -->
+<section id="page-quiz" class="page" aria-labelledby="quiz-title">
+  <div class="quiz-inner">
+    <h1 class="sr-only" id="quiz-title">Quiz</h1>
+
+    <div class="quiz-stage" id="quiz-stage">
+      <div class="quiz-mode" role="group" aria-label="What to study">
+        <button data-mode="chars" class="is-on">Characters</button>
+        <button data-mode="writing">Writing</button>
+        <button data-mode="radicals">Radicals</button>
+        <button data-mode="full">Full review</button>
+      </div>
+
+      <div class="quiz-sub" id="quiz-sub" role="group" aria-label="How full review asks" hidden>
+        <span class="quiz-sub-label">Full review asks:</span>
+        <button data-sub="chars" class="is-on">Recognise</button>
+        <button data-sub="writing">Write</button>
+      </div>
+
+      <div class="quiz-card" id="quiz-card" hidden>
+        <div class="quiz-top">
+          <span class="quiz-level" id="quiz-level"><span class="dot"></span><span id="quiz-level-text"></span></span>
+          <span class="quiz-count" id="quiz-count"></span>
+        </div>
+        <div class="quiz-prompt" id="quiz-prompt"></div>
+        <div class="quiz-prompt-sub" id="quiz-prompt-sub" hidden></div>
+        <div class="quiz-answer" id="quiz-answer" hidden>
+          <div class="quiz-a-main" id="quiz-a-main"></div>
+          <div class="quiz-a-sub" id="quiz-a-sub"></div>
+        </div>
+        <div class="quiz-stroke" id="quiz-stroke" hidden>
+          <span class="quiz-stroke-label">Stroke Order:</span>
+          <span class="quiz-stroke-links" id="quiz-stroke-links"></span>
+        </div>
+        <div class="quiz-actions">
+          <button class="btn btn-ghost" id="quiz-reveal">Reveal</button>
+          <button class="btn btn-ghost" id="quiz-known" hidden>Mark known</button>
+          <button class="btn btn-primary" id="quiz-next">Next card</button>
+        </div>
+        <div class="quiz-key"><b>Enter</b> to reveal / next</div>
+      </div>
+
+      <div class="quiz-empty" id="quiz-empty" hidden>
+        <div class="quiz-empty-ico">测</div>
+        <h2 id="quiz-empty-title">No cards to review yet</h2>
+        <p id="quiz-empty-text"></p>
+        <button class="btn btn-primary" id="quiz-empty-btn">Go to the map</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="focus" id="focus" hidden>
+  <div class="focus-backdrop" data-close></div>
+  <div class="focus-card" role="dialog" aria-modal="true" aria-labelledby="focus-hz" tabindex="-1">
+    <button class="focus-close" data-close title="Close (Esc)" aria-label="Close">×</button>
+    <div class="focus-level" id="focus-level"><span class="dot"></span><span id="focus-level-text"></span></div>
+    <div class="focus-hz" id="focus-hz"></div>
+    <div class="focus-py" id="focus-py"></div>
+    <div class="focus-def" id="focus-def"></div>
+    <div class="focus-actions">
+      <button data-mark="1" class="mk mk-known">Known</button>
+      <button data-mark="3" class="mk mk-write">To write</button>
+    </div>
+    <div class="focus-pos" id="focus-pos"></div>
+  </div>
+</div>
+
 <script src="data.js"></script>
 <script src="defs.js"></script>
+<script src="radicals.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

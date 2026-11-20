@@ -16,6 +16,7 @@
   var N = COLS * ROWS;
 
   var GREY = "#e3ded2";
+  var YELLOW = "#e8b53a";
   var GREEN = "#3d9860";
   var RED = "#cb4a46";
   var INK = "#2a2620";
@@ -41,7 +42,7 @@
   var hint = document.getElementById("hint");
   var progressText = document.getElementById("progress-text");
   var barKnown = document.getElementById("bar-known");
-  var barRed = document.getElementById("bar-red");
+  var barWrite = document.getElementById("bar-write");
   var searchInput = document.getElementById("search");
   var searchCount = document.getElementById("search-count");
   var nowDot = document.querySelector("#now .dot");
@@ -63,7 +64,7 @@
   var hzFonts = [], pyFonts = [];
   var hzLists = [], pyLists = [];
 
-  var counts = { known: 0, review: 0 };
+  var counts = { known: 0, writing: 0 };
   var levelCounts = {};
 
   var showPinyin = true;
@@ -104,7 +105,7 @@
     }
 
     D.levels.forEach(function (lv) {
-      levelCounts[lv.n] = { known: 0, review: 0, total: 0 };
+      levelCounts[lv.n] = { known: 0, writing: 0, total: 0 };
       lv.tint = mix(lv.color, GREY, 0.34);
       lv.bandFill = rgba(lv.color, 0.16);
       lv.bandEdge = rgba(lv.color, 0.92);
@@ -168,30 +169,33 @@
     state[i] = s;
     var lc = levelCounts[levelOf[i]];
     if (prev === 1) { counts.known--; lc.known--; }
-    else if (prev === 2) { counts.review--; lc.review--; }
+    else if (prev === 3) { counts.writing--; lc.writing--; }
     if (s === 1) { counts.known++; lc.known++; }
-    else if (s === 2) { counts.review++; lc.review++; }
+    else if (s === 3) { counts.writing++; lc.writing++; }
     updateStats();
     scheduleSave();
     requestDraw();
   }
 
-  function cycle(i) { applyState(i, (state[i] + 1) % 3); }
+  /* index = current state, value = next: grey -> yellow -> green -> grey */
+  var NEXT_MARK = [3, 0, 0, 1];
+  function cycle(i) { applyState(i, NEXT_MARK[state[i] || 0]); }
 
   function updateStats() {
     progressText.textContent = fmt(counts.known) + " / " + fmt(D.total);
     barKnown.style.width = (counts.known / D.total) * 100 + "%";
-    barRed.style.width = (counts.review / D.total) * 100 + "%";
+    barWrite.style.width = (counts.writing / D.total) * 100 + "%";
 
     D.levels.forEach(function (lv) {
       var chip = document.querySelector('.chip[data-lv="' + lv.n + '"]');
       if (!chip) return;
       var lc = levelCounts[lv.n];
       chip.querySelector(".mini i").style.width =
-        ((lc.known + lc.review) / lc.total) * 100 + "%";
+        ((lc.known + lc.writing) / lc.total) * 100 + "%";
       chip.querySelector(".num").textContent = fmt(lc.known) + "/" + fmt(lc.total);
       chip.title = "Level " + lv.label + " · " + fmt(lc.known) + " known · " +
-        fmt(lc.review) + " to review · " + fmt(lc.total - lc.known - lc.review) + " new";
+        fmt(lc.writing) + " to write · " +
+        fmt(lc.total - lc.known - lc.writing) + " new";
     });
   }
 
@@ -212,14 +216,18 @@
     if (!raw) return;
     var data;
     try { data = JSON.parse(raw); } catch (e) { return; }
+    var migrated = false;
     for (var k in data) {
       var i = +k, s = data[k];
-      if (!(i >= 0 && i < N) || !(s === 1 || s === 2) || !hz[i]) continue;
+      if (!(i >= 0 && i < N) || !hz[i]) continue;
+      if (s === 2) { s = 3; migrated = true; }   /* old "to review" marks become "to write" */
+      if (!(s === 1 || s === 3)) continue;
       state[i] = s;
       var lc = levelCounts[levelOf[i]];
       if (s === 1) { counts.known++; lc.known++; }
-      else { counts.review++; lc.review++; }
+      else if (s === 3) { counts.writing++; lc.writing++; }
     }
+    if (migrated) save();
   }
 
   /* ------------------------------------------------------------- camera */
@@ -309,9 +317,10 @@
 
       var lc = levelCounts[lv.n];
 
-      drawPass(ca, cb, ra, rb, 0, far ? lv.tint : GREY, round, lc.known + lc.review === lc.total);
+      drawPass(ca, cb, ra, rb, 0, far ? lv.tint : GREY, round,
+               lc.known + lc.writing === lc.total);
       if (lc.known) drawPass(ca, cb, ra, rb, 1, GREEN, round, false);
-      if (lc.review) drawPass(ca, cb, ra, rb, 2, RED, round, false);
+      if (lc.writing) drawPass(ca, cb, ra, rb, 3, YELLOW, round, false);
     }
 
     /* ---- level borders, drawn over the cards so they stay crisp ---- */
@@ -360,7 +369,7 @@
           idx = list[k];
           row = (idx / COLS) | 0;
           col = idx - row * COLS;
-          ctx.fillStyle = state[idx] ? "#fff" : INK;
+          ctx.fillStyle = state[idx] === 3 ? "#3b2c07" : (state[idx] ? "#fff" : INK);
           ctx.fillText(hz[idx], col * CW + CW / 2, row * CH + CH / 2 + offset);
         }
       }
@@ -374,7 +383,7 @@
             idx = list[k];
             row = (idx / COLS) | 0;
             col = idx - row * COLS;
-            ctx.fillStyle = state[idx] ? "rgba(255,255,255,.88)" : "rgba(42,38,32,.66)";
+            ctx.fillStyle = state[idx] === 3 ? "rgba(59,44,7,.78)" : (state[idx] ? "rgba(255,255,255,.88)" : "rgba(42,38,32,.66)");
             ctx.fillText(py[idx], col * CW + CW / 2, row * CH + CH / 2 + 11.5);
           }
         }
@@ -767,7 +776,7 @@
     if (!focusOpen) return;
     if (e.key === "Escape") { closeFocus(); e.preventDefault(); }
     else if (e.key === "1") { applyState(focusIndex, 1); closeFocus(); e.preventDefault(); }
-    else if (e.key === "2") { applyState(focusIndex, 2); closeFocus(); e.preventDefault(); }
+    else if (e.key === "2") { applyState(focusIndex, 3); closeFocus(); e.preventDefault(); }
   });
 
   /* ------------------------------------------------------------- UI wiring */
@@ -819,14 +828,14 @@
   });
 
   document.getElementById("reset").addEventListener("click", function () {
-    if (!counts.known && !counts.review) return;
+    if (!counts.known && !counts.writing) return;
     if (!window.confirm("Clear all colour marks? This cannot be undone.")) return;
     state.fill(0);
     counts.known = 0;
-    counts.review = 0;
+    counts.writing = 0;
     Object.keys(levelCounts).forEach(function (k) {
       levelCounts[k].known = 0;
-      levelCounts[k].review = 0;
+      levelCounts[k].writing = 0;
     });
     updateStats();
     requestDraw();
@@ -904,6 +913,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
+    if (document.body.dataset.page !== "map") return;
     if (e.target.tagName === "INPUT") return;
     var rect = stage.getBoundingClientRect();
     var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
@@ -938,12 +948,396 @@
   }
   window.addEventListener("hashchange", applyHash);
 
+  /* ------------------------------------------------------------- pages */
+  var rail = document.getElementById("rail");
+  var currentPage = "map";
+
+  function setPage(name) {
+    if (name === currentPage) return;
+    currentPage = name;
+    document.body.dataset.page = name;
+
+    var btns = rail.querySelectorAll(".rail-btn");
+    for (var b = 0; b < btns.length; b++) {
+      btns[b].classList.toggle("is-active", btns[b].dataset.page === name);
+    }
+
+    if (name === "radicals") buildRadicals();
+    else if (name === "quiz") startQuiz();
+    else if (name === "map") {
+      /* the canvas is 0×0 while hidden, so size it again on the way back */
+      requestAnimationFrame(function () { resize(); });
+    }
+  }
+
+  rail.addEventListener("click", function (e) {
+    var btn = e.target.closest(".rail-btn");
+    if (btn) setPage(btn.dataset.page);
+  });
+
+  /* ------------------------------------------------------------- radicals page */
+  var radBuilt = false;
+  var radStroke = 0;
+  var radGrid = document.getElementById("rad-grid");
+  var radFilter = document.getElementById("stroke-filter");
+  var RADICALS = window.HSK_RADICALS || [];
+
+  var RADKEY = "hsk3.rad.v1";
+  var radState = {};
+
+  function loadRadState() {
+    try { radState = JSON.parse(localStorage.getItem(RADKEY) || "{}") || {}; } catch (e) { radState = {}; }
+  }
+  function saveRadState() {
+    try { localStorage.setItem(RADKEY, JSON.stringify(radState)); } catch (e) {}
+  }
+
+  function radCard(r) {
+    var meta = "<span>" + r.s + " stroke" + (r.s > 1 ? "s" : "") + "</span>";
+    return '<article class="rad" data-r="' + r.r + '" data-s="' + (radState[r.r] || 0) + '">' +
+      '<div class="rad-char">' + r.r + "</div>" +
+      '<div class="rad-py">' + (r.p || "—") + "</div>" +
+      '<div class="rad-def">' + (r.m || "") + "</div>" +
+      '<div class="rad-meta">' + meta + "</div></article>";
+  }
+
+  function renderRadicals() {
+    var out = [];
+    for (var i = 0; i < RADICALS.length; i++) {
+      if (radStroke && RADICALS[i].s !== radStroke) continue;
+      out.push(radCard(RADICALS[i]));
+    }
+    radGrid.innerHTML = out.join("");
+  }
+
+  function buildRadicals() {
+    if (radBuilt || !RADICALS.length) return;
+    radBuilt = true;
+
+    var counts = {};
+    RADICALS.forEach(function (r) { counts[r.s] = (counts[r.s] || 0) + 1; });
+    var chips = ['<button class="stroke-chip is-on" data-s="0">All <span class="n">' +
+      RADICALS.length + "</span></button>"];
+    Object.keys(counts).sort(function (a, b) { return a - b; }).forEach(function (s) {
+      chips.push('<button class="stroke-chip" data-s="' + s + '">' + s +
+        ' <span class="n">' + counts[s] + "</span></button>");
+    });
+    radFilter.innerHTML = chips.join("");
+    renderRadicals();
+  }
+
+  radGrid.addEventListener("click", function (e) {
+    var card = e.target.closest(".rad");
+    if (!card) return;
+    var ch = card.dataset.r;
+    var s = ((radState[ch] || 0) + 1) % 3;
+    if (s) radState[ch] = s; else delete radState[ch];
+    card.dataset.s = s;
+    saveRadState();
+  });
+
+  radFilter.addEventListener("click", function (e) {
+    var chip = e.target.closest(".stroke-chip");
+    if (!chip) return;
+    radStroke = +chip.dataset.s;
+    var chips = radFilter.querySelectorAll(".stroke-chip");
+    for (var i = 0; i < chips.length; i++) chips[i].classList.toggle("is-on", chips[i] === chip);
+    renderRadicals();
+  });
+
+  /* ------------------------------------------------------------- quiz page */
+  var quizCard = document.getElementById("quiz-card");
+  var quizEmpty = document.getElementById("quiz-empty");
+  var quizPrompt = document.getElementById("quiz-prompt");
+  var quizPromptSub = document.getElementById("quiz-prompt-sub");
+  var quizAMain = document.getElementById("quiz-a-main");
+  var quizASub = document.getElementById("quiz-a-sub");
+  var quizAnswer = document.getElementById("quiz-answer");
+  var quizLevel = document.getElementById("quiz-level");
+  var quizLevelText = document.getElementById("quiz-level-text");
+  var quizCount = document.getElementById("quiz-count");
+  var quizRevealBtn = document.getElementById("quiz-reveal");
+  var quizNextBtn = document.getElementById("quiz-next");
+  var quizKnownBtn = document.getElementById("quiz-known");
+  var quizStroke = document.getElementById("quiz-stroke");
+  var quizStrokeLinks = document.getElementById("quiz-stroke-links");
+  var quizEmptyTitle = document.getElementById("quiz-empty-title");
+  var quizEmptyText = document.getElementById("quiz-empty-text");
+  var quizEmptyBtn = document.getElementById("quiz-empty-btn");
+  var quizModeEl = document.querySelector(".quiz-mode");
+  var quizSubEl = document.getElementById("quiz-sub");
+
+  var quiz = { queue: [], pos: 0, revealed: false, mode: "chars" };
+  var quizMode = "chars";
+  var fullPass = "chars";   /* full review asks either by recognising or by writing */
+  var radByChar = {};
+  RADICALS.forEach(function (r) { radByChar[r.r] = r; });
+
+  function shuffle(list) {
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = list[i]; list[i] = list[j]; list[j] = t;
+    }
+    return list;
+  }
+
+  function setQuizMode(mode, rebuild) {
+    quizMode = mode;
+    var btns = quizModeEl.querySelectorAll("[data-mode]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("is-on", btns[i].dataset.mode === mode);
+    }
+    quizSubEl.hidden = mode !== "full";
+    try { localStorage.setItem("hsk3.quizmode", mode); } catch (e) {}
+    if (rebuild) startQuiz();
+  }
+
+  quizModeEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-mode]");
+    if (!btn || btn.dataset.mode === quizMode) return;
+    setQuizMode(btn.dataset.mode, true);
+  });
+
+  function setFullPass(pass, rebuild) {
+    fullPass = pass;
+    var btns = quizSubEl.querySelectorAll("[data-sub]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("is-on", btns[i].dataset.sub === pass);
+    }
+    try { localStorage.setItem("hsk3.fullpass", pass); } catch (e) {}
+    if (rebuild) startQuiz();
+  }
+
+  quizSubEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-sub]");
+    if (!btn || btn.dataset.sub === fullPass) return;
+    setFullPass(btn.dataset.sub, true);
+  });
+
+  function emptyState() {
+    var map = {
+      chars: {
+        title: "No cards to practise yet",
+        text: "Mark words <b>To write</b> (yellow) on the map — click a card and choose " +
+              "<i>To write</i>, or switch on <b>Quick mark</b> and click once.",
+        btn: "Go to the map",
+        page: "map"
+      },
+      writing: {
+        title: "No cards to practise writing yet",
+        text: "Mark words <b>To write</b> (yellow) on the map — click a card and choose " +
+              "<i>To write</i>, or switch on <b>Quick mark</b> and click once.",
+        btn: "Go to the map",
+        page: "map"
+      },
+      full: {
+        title: "Nothing known to review yet",
+        text: "Full review practises the words marked <b>Known</b> (green) — pick whether to " +
+              "<i>recognise</i> or <i>write</i> them above the card. Mark a few words green first.",
+        btn: "Go to the map",
+        page: "map"
+      },
+      radicals: {
+        title: "No radicals to review yet",
+        text: "Mark some radicals on the <b>Radicals</b> page — click one until it turns red.",
+        btn: "Go to the radicals",
+        page: "radicals"
+      }
+    }[quizMode];
+
+    quizCard.hidden = true;
+    quizEmpty.hidden = false;
+    quizEmptyTitle.textContent = map.title;
+    quizEmptyText.innerHTML = map.text;
+    quizEmptyBtn.textContent = map.btn;
+    quizEmptyBtn.dataset.page = map.page;
+  }
+
+  function startQuiz() {
+    var pool = [];
+
+    if (quizMode === "radicals") {
+      for (var i = 0; i < RADICALS.length; i++) {
+        if (radState[RADICALS[i].r] === 2) pool.push({ r: RADICALS[i].r, t: "radical" });
+      }
+    } else if (quizMode === "writing") {
+      for (var w = 0; w < N; w++) if (state[w] === 3 && hz[w]) pool.push({ i: w, t: "writing" });
+    } else if (quizMode === "chars") {
+      /* the yellow cards, asked character -> meaning */
+      for (var c = 0; c < N; c++) if (state[c] === 3 && hz[c]) pool.push({ i: c, t: "chars" });
+    } else if (quizMode === "full") {
+      /* known cards only, asked in the direction picked above the card */
+      for (var f = 0; f < N; f++) {
+        if (state[f] === 1 && hz[f]) {
+          pool.push({ i: f, t: fullPass });
+        }
+      }
+    } else {
+      for (var j = 0; j < N; j++) if (state[j] === 3 && hz[j]) pool.push({ i: j, t: "chars" });
+    }
+    shuffle(pool);
+
+    quiz.queue = pool;
+    quiz.pos = 0;
+    quiz.revealed = false;
+    quiz.mode = quizMode;
+
+    if (!pool.length) { emptyState(); return; }
+    quizEmpty.hidden = true;
+    quizCard.hidden = false;
+    showQuizCard();
+  }
+
+  function showQuizCard() {
+    var item = quiz.queue[quiz.pos];
+    quiz.revealed = false;
+    quizAnswer.hidden = true;
+    quizPromptSub.hidden = true;
+    quizPromptSub.textContent = "";
+    quizRevealBtn.disabled = false;
+    quizKnownBtn.hidden = true;
+    quizStroke.hidden = true;
+    quizStrokeLinks.innerHTML = "";
+    quizCount.textContent = (quiz.pos + 1) + " / " + quiz.queue.length;
+
+    if (item.t === "radical") {
+      var rad = radByChar[item.r];
+      quizLevel.className = "quiz-level";
+      quizLevelText.textContent = "Radical · " + rad.s + " stroke" + (rad.s > 1 ? "s" : "");
+
+      var name = rad.p || "—";
+      quizPrompt.className = "quiz-prompt is-pinyin" +
+        (name.length > 10 ? " long" : "") + (name.length > 18 ? " xlong" : "");
+      quizPrompt.textContent = name;
+
+      quizAMain.className = "quiz-a-main is-glyph";
+      quizAMain.textContent = rad.r;
+      quizASub.textContent = rad.m || "";
+      quizASub.hidden = !rad.m;
+      return;
+    }
+
+    var i = item.i;
+    var row = (i / COLS) | 0, col = i - row * COLS;
+    var lvNum = levelOf[i];
+    var lvObj = D.levels.filter(function (l) { return l.n === lvNum; })[0];
+    var def = (window.HSK_DEFS && window.HSK_DEFS[row] && window.HSK_DEFS[row][col]) || "";
+
+    quizLevel.className = "quiz-level l" + lvNum;
+    quizLevelText.textContent = "Level " + lvObj.label;
+
+    if (item.t === "writing") {
+      /* pinyin + meaning first, the character on reveal */
+      var namePy = py[i] || "—";
+      quizPrompt.className = "quiz-prompt is-pinyin" +
+        (namePy.length > 10 ? " long" : "") + (namePy.length > 18 ? " xlong" : "");
+      quizPrompt.textContent = namePy;
+
+      quizPromptSub.hidden = false;
+      quizPromptSub.textContent = def || "No definition available.";
+
+      quizAMain.className = "quiz-a-main is-glyph";
+      quizAMain.textContent = hz[i];
+      quizASub.textContent = "";
+      quizASub.hidden = true;
+      return;
+    }
+
+    quizPrompt.className = "quiz-prompt" + (hz[i].length > 3 ? " long" : "");
+    quizPrompt.textContent = hz[i];
+
+    quizAMain.className = "quiz-a-main";
+    quizAMain.textContent = py[i];
+    quizASub.textContent = def || "No definition available.";
+    quizASub.hidden = false;
+    quizASub.classList.toggle("empty", !def);
+  }
+  function revealQuiz() {
+    if (!quiz.queue.length || quiz.revealed) return;
+    var item = quiz.queue[quiz.pos];
+    quiz.revealed = true;
+    quizAnswer.hidden = false;
+    quizRevealBtn.disabled = true;
+
+    /* writing cards reveal the character: offer stroke order for each of its characters */
+    if (item && item.t === "writing") showStrokeLinks(hz[item.i]);
+
+    /* nothing to promote when the card is already known */
+    var already = item && (item.t === "radical" ? radState[item.r] === 1 : state[item.i] === 1);
+    quizKnownBtn.hidden = !!already;
+  }
+
+  function showStrokeLinks(word) {
+    var html = "";
+    for (var k = 0; k < word.length; k++) {
+      var ch = word[k];
+      if (!/[\u3400-\u9fff]/.test(ch)) continue;
+      html += '<a class="stroke-link" target="strokeorder" ' +
+        'title="Stroke order for ' + ch + '" ' +
+        'href="https://www.strokeorder.com/chinese/' + ch + '">' +
+        '<span class="q">\u201c</span>' + ch + '<span class="q">\u201d</span></a>';
+    }
+    quizStrokeLinks.innerHTML = html;
+    quizStroke.hidden = !html;
+  }
+
+  function markKnown() {
+    var item = quiz.queue[quiz.pos];
+    if (!item) return;
+    if (item.t === "radical") {
+      radState[item.r] = 1;
+      saveRadState();
+      renderRadicals();
+    } else {
+      applyState(item.i, 1);
+    }
+
+    /* it is known now, so it leaves this queue */
+    quiz.queue.splice(quiz.pos, 1);
+    if (!quiz.queue.length) { startQuiz(); return; }
+    if (quiz.pos >= quiz.queue.length) { shuffle(quiz.queue); quiz.pos = 0; }
+    showQuizCard();
+  }
+
+  function nextQuiz() {
+    if (!quiz.queue.length) return;
+    quiz.pos++;
+    if (quiz.pos >= quiz.queue.length) {
+      shuffle(quiz.queue);
+      quiz.pos = 0;
+    }
+    showQuizCard();
+  }
+
+  quizRevealBtn.addEventListener("click", revealQuiz);
+  quizNextBtn.addEventListener("click", nextQuiz);
+  quizKnownBtn.addEventListener("click", markKnown);
+  quizEmptyBtn.addEventListener("click", function () {
+    setPage(quizEmptyBtn.dataset.page || "map");
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (currentPage !== "quiz" || e.target.tagName === "INPUT") return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (quizCard.hidden) return;
+      if (quiz.revealed) nextQuiz();
+      else revealQuiz();
+    }
+  });
   /* ------------------------------------------------------------- boot */
   function boot() {
     build();
     load();
+    loadRadState();
     updateStats();
     resize();
+
+    try {
+      var savedMode = localStorage.getItem("hsk3.quizmode");
+      if (savedMode && savedMode !== "chars") setQuizMode(savedMode, false);
+      if (localStorage.getItem("hsk3.fullpass") === "writing") setFullPass("writing", false);
+    } catch (e) {}
 
     try {
       if (localStorage.getItem("hsk3.pinyin") === "0") {
